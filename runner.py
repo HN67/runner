@@ -15,6 +15,9 @@ import pygame
 config = {
     "windowWidth": 512,
     "windowHeight": 512,
+    "minimapWidth": 2048,
+    "minimapHeight": 2048,
+    "minimapScale": 1/16,
     "tps": 60,
     "name": "Runner",
     "blockSize": 32,
@@ -295,6 +298,9 @@ def main():
     # Create viewbox
     viewbox = Viewbox(pygame.Rect(0, 0, config["windowWidth"], config["windowHeight"]))
 
+    # Create minimap
+    minimap = Viewbox(pygame.Rect(0, 0, config["minimapWidth"], config["minimapHeight"]))
+
     # Create clock
     clock = pygame.time.Clock()
 
@@ -365,19 +371,36 @@ def main():
             # Update player
             player.update(inputs)
 
+            # Refresh the viewbox
             # Lock viewbox to follow player
             viewbox.rect.center = player.rect.center
-
-            # Refresh the viewbox
             # Fill over old image
             viewbox.image.fill((15, 15, 15))
-            # Render the blocks into the viewbox
+            # Render the blocks and then player into the viewbox
             viewbox.render(blocks)
-            # Render player # TODO make visibles sprite group
-            viewbox.render((player, ))
+            viewbox.render((player,))
+
+            # Refresh the minimap
+            # Lock viewbox to follow player
+            minimap.rect.center = player.rect.center
+            # Fill over old image
+            minimap.image.fill((31, 31, 31))
+            # Render the blocks and then player into the viewbox
+            minimap.render(blocks)
+            minimap.render((player,))
 
             # Slap the viewbox onto the screen
             screen.blit(viewbox.image, (0, 0))
+
+            # Display the scaled minimap
+            screen.blit(
+                pygame.transform.scale(
+                    minimap.image, (
+                        int(config["minimapWidth"]*config["minimapScale"]),
+                        int(config["minimapHeight"]*config["minimapScale"])
+                    )
+                ), (0, 0)
+            )
 
             # Flip display
             pygame.display.flip()
