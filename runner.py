@@ -74,8 +74,14 @@ class Player(Solid):
         """Automatically produces a keyConfig in the format expected by the constructor"""
         return {"jump": jump, "left": left, "right": right}
 
+    @classmethod
+    def physicsDictionary(cls, jump: int, gravity: int, move: int) -> typing.Dict[str, int]:
+        """Automatically produces a keyConfig in the format expected by the constructor"""
+        return {"jump": jump, "gravity": gravity, "move": move}
+
     def __init__(self, image: pygame.Surface,
-                 hitbox: pygame.Rect, keyConfig: typing.Dict[str, int]
+                 hitbox: pygame.Rect, keyConfig: typing.Dict[str, int],
+                 physicsConfig: typing.Dict[str, int]
                 ):
 
         # Call Solid init
@@ -91,6 +97,9 @@ class Player(Solid):
         # Reference keyConfig
         self.keyConfig = keyConfig
 
+        # Reference physics config
+        self.physicsConfig = physicsConfig
+
         # Create movement vector
         self.speed = pygame.Vector2(0, 0)
 
@@ -103,7 +112,9 @@ class Player(Solid):
         self.hitbox.x += displacement.x
         # Check for collisions
         # Get collisions
-        collisions = pygame.sprite.spritecollide(self, solids, False, collided=lambda s, o: s.collided(o))
+        collisions = pygame.sprite.spritecollide(
+            self, solids, False, collided=lambda s, o: s.collided(o)
+        )
         # Resolve collisions if existant
         if collisions:
             # Find closest collision
@@ -129,7 +140,9 @@ class Player(Solid):
         self.hitbox.y += displacement.y
         # Check for collisions
         # Get collisions
-        collisions = pygame.sprite.spritecollide(self, solids, False, collided=lambda s, o: s.collided(o))
+        collisions = pygame.sprite.spritecollide(
+            self, solids, False, collided=lambda s, o: s.collided(o)
+        )
         # Resolve collisions if existant
         if collisions:
             # Find closest collision
@@ -156,9 +169,9 @@ class Player(Solid):
         # TODO
         self.speed.x = 0
         if inputs["keyboard"][self.keyConfig["left"]]:
-            self.speed.x -= 5 # TODO config rhis
+            self.speed.x -= self.physicsConfig["move"]
         if inputs["keyboard"][self.keyConfig["right"]]:
-            self.speed.x += 5
+            self.speed.x += self.physicsConfig["move"]
 
         # Check events for keypresses
         for event in inputs["events"]:
@@ -166,10 +179,10 @@ class Player(Solid):
             if event.type == pygame.KEYDOWN:
                 # Check for jump key
                 if event.key == self.keyConfig["jump"]:
-                    self.speed.y = -10 # TODO config
+                    self.speed.y = -self.physicsConfig["jump"]
 
         # Apply gravity
-        self.speed.y += 1 # TODO config create a physics config object
+        self.speed.y += self.physicsConfig["gravity"]
 
         # Move using object method
         self.move(self.speed, inputs["solids"])
@@ -234,7 +247,8 @@ def main():
     # Create player
     player = Player(
         images["player"], images["player"].get_rect(),
-        Player.keyDictionary(pygame.K_UP, pygame.K_LEFT, pygame.K_RIGHT)
+        Player.keyDictionary(pygame.K_UP, pygame.K_LEFT, pygame.K_RIGHT),
+        Player.physicsDictionary(15, 1, 7),
     )
 
     # Initiate block group
