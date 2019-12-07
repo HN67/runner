@@ -18,6 +18,7 @@ config = {
     "tps": 60,
     "name": "Runner",
     "blockSize": 32,
+    "blockDensity": 0.2,
 }
 
 # Define path function that turns a relative path into an absolute path based on file location
@@ -60,6 +61,69 @@ class Block(Solid):
 
     def update(self):
         """Updates the block"""
+
+class Grid:
+    """Manages grid of tiles, mainly Blocks
+    Data is a Dict with 2-d coordinate pairs as keys, entities as values
+    Scale is the width and height in pixels of a tile
+    """
+
+    def __init__(self, scale: int):
+
+        # Referenc scale
+        self.scale = scale
+
+        # Create data structure
+        self.data = {}
+
+    def __getitem__(self, key: typing.Tuple[int, int]):
+        """Returns the object at key from the grid"""
+        return self.data[key]
+
+    def __setitem__(self, key: typing.Tuple[int, int], tile) -> None:
+        """Adds an object to the data grid"""
+        self.data[key] = tile
+
+    def __delitem__(self, key: typing.Tuple[int, int]):
+        """Deletes an object from the data grid"""
+        del self.data[key]
+
+    def __contains__(self, key: typing.Tuple[int, int]):
+        """Checks if the key is in the data grid"""
+        return key in self.data
+
+    def rect(self, pos: typing.Tuple[int, int]) -> pygame.Rect:
+        """Returns a rect bounding the given tile coordinate
+        Considers (0, 0) tile to have an origin at (0, 0), extending down-left
+        """
+        return pygame.Rect(pos[0]*self.scale, pos[1]*self.scale, self.scale, self.scale)
+
+    def index(self, pos: pygame.Vector2) -> typing.Tuple[int, int]:
+        """Returns a tile index using the given position vector / rect (uses topleft origin)
+        Considers top and left edges to be part of a tile
+        """
+        return (pos[0]//self.scale, pos[1]//self.scale)
+
+    def viewbox_tiles(self, viewbox: Viewbox):
+        """Returns a set of tile coordinates viewable by the given viewbox"""
+
+        # Find top-left and bottom-right bounds
+        topLeft = self.index(viewbox.rect.topleft)
+        bottomRight = self.index(viewbox.rect.bottomright)
+
+        # Return generated set
+        return {
+            (column, row)
+            for column in range(topLeft[0], bottomRight[0]+1)
+            for row in range(topLeft[1], bottomRight[1]+1)
+        }
+
+    def add_block(self, index: typing.Tuple[int, int], image: pygame.Surface) -> Block:
+        """Creates a Block at the given index, with appropiate rect, and returns it
+        The image should probably be a multiple of .scale"""
+        block = Block(self.rect(index).topleft, image)
+        self[index] = block
+        return block
 
 class Player(Solid):
     """Main controllable character of the game
@@ -254,8 +318,11 @@ def main():
     # Initiate block group
     blocks = pygame.sprite.Group()
 
+    # Create block grid to track blocks and explored area
+    grid = Grid(config["blockSize"])
+
     # Create block below player
-    blocks.add(Block((0, 100), images["block"]))
+    blocks.add(grid.add_block((0, 3), images["block"]))
 
     # Main loop
     running = True
@@ -278,24 +345,19 @@ def main():
         # Skips the rest of the loop if the program is quitting
         if running:
 
+            # Generate blocks in uncharted territory
+            # Pull visible tiles
+            visibleTiles = grid.viewbox_tiles(viewbox)
+            # Generate tiles in uncharted tiles
+            for tile in visibleTiles:
+                if tile not in grid:
+                    if random.random() < config["blockDensity"]:
+                        blocks.add(grid.add_block(tile, images["block"]))
+                    else:
+                        grid[tile] = None
+
             # Create input dict
             inputs = inputsDictionary(events, keyboard, blocks)
-
-            # Create new block every other space based on width ticks
-            if tick % 200 == 0:
-                blocks.add(
-                    Block(
-                        (
-                            random.randint(
-                                0, config["windowWidth"]//config["blockSize"] - 1
-                            )*config["blockSize"],
-                            random.randint(
-                                0, config["windowHeight"]//config["blockSize"] - 1
-                            )*config["blockSize"]
-                        ),
-                        images["block"]
-                    )
-                )
 
             # Update blocks
             blocks.update()
@@ -308,7 +370,7 @@ def main():
 
             # Refresh the viewbox
             # Fill over old image
-            viewbox.image.fill((100, 100, 100))
+            viewbox.image.fill((31, 31, 31))
             # Render the blocks into the viewbox
             viewbox.render(blocks)
             # Render player # TODO make visibles sprite group
