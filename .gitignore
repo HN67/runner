@@ -1,0 +1,2 @@
+# Ignore pycache of custom modules
+__pycache__/
