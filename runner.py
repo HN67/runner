@@ -314,6 +314,9 @@ def main():
     # Convert loaded surfaces to screen format
     images = {name: pygame.image.load(path(name+".png")).convert_alpha() for name in images}
 
+    images["space"] = pygame.Surface((config["blockSize"], config["blockSize"])).convert()
+    images["space"].fill((63, 63, 63))
+
     # Create player
     player = Player(
         images["player"], pygame.Rect(0, 0, 26, 26),
@@ -323,6 +326,9 @@ def main():
 
     # Initiate block group
     blocks = pygame.sprite.Group()
+
+    # Create filler group
+    spaces = pygame.sprite.Group()
 
     # Create block grid to track blocks and explored area
     grid = Grid(config["blockSize"])
@@ -354,12 +360,14 @@ def main():
             # Generate blocks in uncharted territory
             # Pull visible tiles
             visibleTiles = grid.viewbox_tiles(viewbox)
+            
             # Generate tiles in uncharted tiles
             for tile in visibleTiles:
                 if tile not in grid:
                     if random.random() < config["blockDensity"]:
                         blocks.add(grid.add_block(tile, images["block"]))
                     else:
+                        spaces.add(grid.add_block(tile, images["space"]))
                         grid[tile] = None
 
             # Create input dict
@@ -387,6 +395,7 @@ def main():
             minimap.image.fill((31, 31, 31))
             # Render the blocks and then player into the viewbox
             minimap.render(blocks)
+            minimap.render(spaces)
             minimap.render((player,))
 
             # Slap the viewbox onto the screen
