@@ -18,7 +18,7 @@ config = {
     "tps": 60,
     "name": "Runner",
     "blockSize": 32,
-    "blockDensity": 0.2,
+    "blockDensity": 0.1,
 }
 
 # Define path function that turns a relative path into an absolute path based on file location
@@ -306,11 +306,11 @@ def main():
     # Load images
     images = ("block", "player")
     # Convert loaded surfaces to screen format
-    images = {name: pygame.image.load(path(name+".png")).convert() for name in images}
+    images = {name: pygame.image.load(path(name+".png")).convert_alpha() for name in images}
 
     # Create player
     player = Player(
-        images["player"], images["player"].get_rect(),
+        images["player"], pygame.Rect(0, 0, 26, 26),
         Player.keyDictionary(pygame.K_UP, pygame.K_LEFT, pygame.K_RIGHT),
         Player.physicsDictionary(15, 1, 7),
     )
@@ -370,7 +370,7 @@ def main():
 
             # Refresh the viewbox
             # Fill over old image
-            viewbox.image.fill((31, 31, 31))
+            viewbox.image.fill((15, 15, 15))
             # Render the blocks into the viewbox
             viewbox.render(blocks)
             # Render player # TODO make visibles sprite group
