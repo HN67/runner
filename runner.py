@@ -21,7 +21,7 @@ config = {
     "tps": 60,
     "name": "Runner",
     "blockSize": 32,
-    "blockDensity": 0.1,
+    "blockDensity": 0.25,
 }
 
 # Define path function that turns a relative path into an absolute path based on file location
@@ -142,9 +142,20 @@ class Player(Solid):
         return {"jump": jump, "left": left, "right": right}
 
     @classmethod
-    def physicsDictionary(cls, jump: int, gravity: int, move: int) -> typing.Dict[str, int]:
-        """Automatically produces a keyConfig in the format expected by the constructor"""
-        return {"jump": jump, "gravity": gravity, "move": move}
+    def physicsDictionary(cls, jump: int, gravity: int, maxFall: int,
+                          maxSpeed: int, speed: int, jumps: int) -> typing.Dict[str, int]:
+        """Automatically produces a physicsConfig in the format expected by the constructor
+        Data usages:
+        jump - jump power set to yspeed on jump
+        gravity - decrease in yspeed every tick
+        maxFall - maximum speed achievable by gravity
+        maxSpeed - maximum running speed
+        speed - horizontal acceleration and decelleration
+        jumps - available jumps refreshed by ground contact"""
+        return {
+            "jump": jump, "gravity": gravity, "maxFall": maxFall,
+            "maxSpeed": maxSpeed, "speed": speed, "jumps": jumps
+        }
 
     def __init__(self, image: pygame.Surface,
                  hitbox: pygame.Rect, keyConfig: typing.Dict[str, int],
@@ -169,6 +180,9 @@ class Player(Solid):
 
         # Create movement vector
         self.speed = pygame.Vector2(0, 0)
+
+        # Create jumps
+        self.jumps = 0
 
     def move(self, displacement: pygame.Vector2, solids: pygame.sprite.Group):
         """Moves the Player by the given displacement, stopping on collision
@@ -219,6 +233,8 @@ class Player(Solid):
                 collision = min(collisions, key=lambda c: c.hitbox.top)
                 # Snap to edge
                 self.hitbox.bottom = collision.hitbox.top
+                # Reset jumps
+                self.jumps = self.physicsConfig["jumps"]
             else: # Moving up, or hypothetically a collision situation without movement
                 # Grabs the collision with the highest bottom edge
                 collision = max(collisions, key=lambda c: c.hitbox.bottom)
@@ -232,24 +248,57 @@ class Player(Solid):
 
         # Parse the input
         # Check for left/right movement presses
-        # Reset to 0 before more sophisticated accel x system
-        # TODO
-        self.speed.x = 0
+        impulse = 0
         if inputs["keyboard"][self.keyConfig["left"]]:
-            self.speed.x -= self.physicsConfig["move"]
+            impulse -= 1
+        # Allow cancelling
         if inputs["keyboard"][self.keyConfig["right"]]:
-            self.speed.x += self.physicsConfig["move"]
+            impulse += 1
+
+        # Move based on impulse
+        # Left movement
+        if impulse == -1:
+            # Allow acceleration under cap
+            if abs(self.speed.x) < self.physicsConfig["maxSpeed"]:
+                self.speed.x -= self.physicsConfig["speed"]
+                # Cap speed
+                if self.speed.x < -self.physicsConfig["maxSpeed"]:
+                    self.speed.x = -self.physicsConfig["maxSpeed"]
+        # Right movement
+        elif impulse == 1:
+            # Allow acceleration under cap
+            if abs(self.speed.x) < self.physicsConfig["maxSpeed"]:
+                self.speed.x += self.physicsConfig["speed"]
+                # Cap speed
+                if self.speed.x > self.physicsConfig["maxSpeed"]:
+                    self.speed.x = self.physicsConfig["maxSpeed"]
+        # This clause triggers if neither or both key is pressed
+        else:
+            # Decrease speed
+            if self.speed.x > 0:
+                self.speed.x -= self.physicsConfig["speed"]
+                # Clip at 0
+                if self.speed.x < 0:
+                    self.speed.x = 0
+            elif self.speed.x < 0:
+                self.speed.x += self.physicsConfig["speed"]
+                # Clip at 0
+                if self.speed.x > 0:
+                    self.speed.x = 0
 
         # Check events for keypresses
         for event in inputs["events"]:
             # Select keydown events
             if event.type == pygame.KEYDOWN:
                 # Check for jump key
-                if event.key == self.keyConfig["jump"]:
+                if event.key == self.keyConfig["jump"] and self.jumps > 0:
                     self.speed.y = -self.physicsConfig["jump"]
+                    # Decrease jumps remaining
+                    self.jumps -= 1
 
-        # Apply gravity
-        self.speed.y += self.physicsConfig["gravity"]
+        # Apply gravity if  below max
+        if self.speed.y < self.physicsConfig["maxFall"]:
+            self.speed.y += self.physicsConfig["gravity"]
 
         # Move using object method
         self.move(self.speed, inputs["solids"])
@@ -319,9 +368,9 @@ def main():
 
     # Create player
     player = Player(
-        images["player"], pygame.Rect(0, 0, 26, 26),
+        images["player"], pygame.Rect(0, 0, 20, 20),
         Player.keyDictionary(pygame.K_UP, pygame.K_LEFT, pygame.K_RIGHT),
-        Player.physicsDictionary(15, 1, 7),
+        Player.physicsDictionary(19, 1, 32, 9, 2, 1),
     )
 
     # Initiate block group
@@ -360,7 +409,7 @@ def main():
             # Generate blocks in uncharted territory
             # Pull visible tiles
             visibleTiles = grid.viewbox_tiles(viewbox)
-            
+
             # Generate tiles in uncharted tiles
             for tile in visibleTiles:
                 if tile not in grid:
