@@ -510,6 +510,23 @@ class Game:
                 else:
                     self.spaces.add(self.grid.add_block(tile, self.images["space"]))
 
+def load_images() -> typing.Dict[str, pygame.Surface]:
+    """Loads the projects image resources
+
+    Returns a dictionary of <name>: surface,
+    where <name> is the name of the file with the extension stripped
+    """
+    # Construct a dictionary to be returned
+    return {
+        # Creates a key by taking everything up to the first '.' in file name
+        # Value is pygame surface loaded from file name, converted
+        name.split(".")[0]: pygame.image.load(path(os.path.join("images", name))).convert_alpha()
+        # Checks every name in 'images' subdirectory | pylint: disable=bad-continuation
+        for name in os.listdir(path("images"))
+        # Safety check to prevent trying to load directories
+        if os.path.isfile(path(os.path.join("images", name)))
+    }
+
 def main():
     """Main game script"""
 
@@ -529,14 +546,8 @@ def main():
     pygame.display.set_caption(config["name"])
     tps = config["tps"]
 
-    # Load images from files
-    # This has to be down after starting the window so we can .convert
-    images = ("block", "player", "coin")
-    # Convert loaded surfaces to screen format
-    images = {name: pygame.image.load(path(name+".png")).convert_alpha() for name in images}
-    # Manufacture filler image
-    images["space"] = pygame.Surface((config["blockSize"], config["blockSize"])).convert()
-    images["space"].fill((63, 63, 63))
+    # Load images
+    images = load_images()
 
     # Create player
     player = Player(
