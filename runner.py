@@ -7,6 +7,7 @@ from __future__ import annotations
 import os
 import typing
 import random
+import itertools
 
 # Import pygame
 import pygame
@@ -21,7 +22,8 @@ config = {
     "tps": 60,
     "name": "Runner",
     "blockSize": 32,
-    "blockDensity": 0.25,
+    "blockDensity": 0.05,
+    "coinDensity": 0.005,
 }
 
 # Define path function that turns a relative path into an absolute path based on file location
@@ -127,6 +129,12 @@ class Grid:
         block = Block(self.rect(index).topleft, image)
         self[index] = block
         return block
+
+    def generate_block(self, index: typing.Tuple[int, int], image: pygame.Surface) -> Block:
+        """Generates a Block at the given index, with appropiate rect, and returns it
+        Does not add the block to the grid, it only generates one that would fit
+        The image should probably be a multiple of .scale"""
+        return Block(self.rect(index).topleft, image)
 
 class Player(Solid):
     """Main controllable character of the game
@@ -243,16 +251,16 @@ class Player(Solid):
             # Stop movement
             self.speed.y = 0
 
-    def update(self, inputs: typing.Dict):
-        """Updates the player using the given input"""
+    def update(self, game: Game):
+        """Updates the player relative to the given Game"""
 
         # Parse the input
         # Check for left/right movement presses
         impulse = 0
-        if inputs["keyboard"][self.keyConfig["left"]]:
+        if game.inputs["keyboard"][self.keyConfig["left"]]:
             impulse -= 1
         # Allow cancelling
-        if inputs["keyboard"][self.keyConfig["right"]]:
+        if game.inputs["keyboard"][self.keyConfig["right"]]:
             impulse += 1
 
         # Move based on impulse
@@ -287,7 +295,7 @@ class Player(Solid):
                     self.speed.x = 0
 
         # Check events for keypresses
-        for event in inputs["events"]:
+        for event in game.inputs["events"]:
             # Select keydown events
             if event.type == pygame.KEYDOWN:
                 # Check for jump key
@@ -301,20 +309,13 @@ class Player(Solid):
             self.speed.y += self.physicsConfig["gravity"]
 
         # Move using object method
-        self.move(self.speed, inputs["solids"])
+        self.move(self.speed, game.solids)
 
         # Align visual rect with actual hitbox
         self.rect.center = self.hitbox.center
 
-
-
-def inputsDictionary(events, keyboard, solids: pygame.sprite.Group = None) -> typing.Dict:
-    """Returns a inputs dictionary in the format expected by Entities
-    solids should be provided to entities performing collisions
-    """
-    return {"events": events, "keyboard": keyboard, "solids": solids}
-
-# Define viewbox
+# A Viewbox represents a view, and provides easy ways to produce a surface
+# that only includes sprites in a specific region, with a offset
 class Viewbox:
     """Represents the view of the game, mainly for displacement"""
 
@@ -337,6 +338,66 @@ class Viewbox:
             # e.g. viewbox offset: (5, 5) will make a sprite at (5, 5) be drawn at (0, 0)
             self.image.blit(sprite.image, sprite.rect.move(-self.rect.x, -self.rect.y))
 
+# Game object, used so that we can pass a single object into things like a Player
+# which can then read what it needs. Should be more scalable than dicts
+class Game:
+    """Stores information about game state and provides methods for updating/modifying the state
+    images: dictionary of surfaces used for various entities
+    scale: the scale of tiles in the game, especially used by the grid"""
+
+    def __init__(self, images: typing.Dict[str, pygame.Surface], player: Player, scale: int):
+
+        # Reference image set
+        self.images = images
+
+        # Reference player
+        self.player = player
+
+        # Create sprite groups
+        # Physical blocks for collisions
+        self.solids = pygame.sprite.Group()
+        # Inventories that are collected on contact
+        self.collectables = pygame.sprite.Group()
+
+        # Empty spaces used for the minimap and grid
+        self.spaces = pygame.sprite.Group()
+
+        # Create grid object, which stores blocks in a ordered manner, mostly for generation
+        self.grid = Grid(scale)
+
+        # Initialize input dictionary
+        self.inputs = {"events": None, "keyboard": None}
+
+    def update(self, events, viewbox: Viewbox):
+        """Updates the Game, interacting entities appropriately
+        Reads read-inputs (i.e. the keyboard) itself,
+        but requires pygame events passed in to be non-destructive
+        Uses a passed viewbox to know what needs to be generated
+        """
+        # Update inputs
+        self.inputs["events"] = events
+        self.inputs["keyboard"] = pygame.key.get_pressed()
+
+        # Update player with this game
+        self.player.update(self)
+
+        # Generate uncharted territory
+        # Pull visible tiles
+        visibleTiles = self.grid.viewbox_tiles(viewbox)
+
+        # Generate tiles in uncharted tiles
+        for tile in visibleTiles:
+            if tile not in self.grid:
+                # Generate float [0, 1)
+                val = random.random()
+                # Generate tile based on val
+                if val < config["coinDensity"]:
+                    self.collectables.add(self.grid.generate_block(tile, self.images["coin"]))
+                    self.spaces.add(self.grid.add_block(tile, self.images["space"]))
+                elif val < config["blockDensity"]:
+                    self.solids.add(self.grid.add_block(tile, self.images["block"]))
+                else:
+                    self.spaces.add(self.grid.add_block(tile, self.images["space"]))
 
 def main():
     """Main game script"""
@@ -344,25 +405,25 @@ def main():
     # Init pygame
     pygame.init()
 
-    # Create viewbox
-    viewbox = Viewbox(pygame.Rect(0, 0, config["windowWidth"], config["windowHeight"]))
-
-    # Create minimap
-    minimap = Viewbox(pygame.Rect(0, 0, config["minimapWidth"], config["minimapHeight"]))
-
     # Create clock
     clock = pygame.time.Clock()
+
+    # Create viewbox
+    viewbox = Viewbox(pygame.Rect(0, 0, config["windowWidth"], config["windowHeight"]))
+    # Create minimap
+    minimap = Viewbox(pygame.Rect(0, 0, config["minimapWidth"], config["minimapHeight"]))
 
     # Setup window
     screen = pygame.display.set_mode(viewbox.rect.size)
     pygame.display.set_caption(config["name"])
     tps = config["tps"]
 
-    # Load images
-    images = ("block", "player")
+    # Load images from files
+    # This has to be down after starting the window so we can .convert
+    images = ("block", "player", "coin")
     # Convert loaded surfaces to screen format
     images = {name: pygame.image.load(path(name+".png")).convert_alpha() for name in images}
-
+    # Manufacture filler image
     images["space"] = pygame.Surface((config["blockSize"], config["blockSize"])).convert()
     images["space"].fill((63, 63, 63))
 
@@ -373,17 +434,11 @@ def main():
         Player.physicsDictionary(19, 1, 32, 9, 2, 1),
     )
 
-    # Initiate block group
-    blocks = pygame.sprite.Group()
-
-    # Create filler group
-    spaces = pygame.sprite.Group()
-
-    # Create block grid to track blocks and explored area
-    grid = Grid(config["blockSize"])
+    # Create game state
+    game = Game(images, player, config["blockSize"])
 
     # Create block below player
-    blocks.add(grid.add_block((0, 3), images["block"]))
+    game.solids.add(game.grid.add_block((0, 3), images["block"]))
 
     # Main loop
     running = True
@@ -400,42 +455,19 @@ def main():
             if event.type == pygame.QUIT:
                 running = False
 
-        # Check other sources of input, e.g. the keyboard
-        keyboard = pygame.key.get_pressed()
-
         # Skips the rest of the loop if the program is quitting
         if running:
 
-            # Generate blocks in uncharted territory
-            # Pull visible tiles
-            visibleTiles = grid.viewbox_tiles(viewbox)
-
-            # Generate tiles in uncharted tiles
-            for tile in visibleTiles:
-                if tile not in grid:
-                    if random.random() < config["blockDensity"]:
-                        blocks.add(grid.add_block(tile, images["block"]))
-                    else:
-                        spaces.add(grid.add_block(tile, images["space"]))
-                        grid[tile] = None
-
-            # Create input dict
-            inputs = inputsDictionary(events, keyboard, blocks)
-
-            # Update blocks
-            blocks.update()
-
-            # Update player
-            player.update(inputs)
+            # Update the game
+            game.update(events, viewbox)
 
             # Refresh the viewbox
             # Lock viewbox to follow player
-            viewbox.rect.center = player.rect.center
+            viewbox.rect.center = game.player.rect.center
             # Fill over old image
             viewbox.image.fill((15, 15, 15))
             # Render the blocks and then player into the viewbox
-            viewbox.render(blocks)
-            viewbox.render((player,))
+            viewbox.render(itertools.chain(game.solids, game.collectables, (player, )))
 
             # Refresh the minimap
             # Lock viewbox to follow player
@@ -443,13 +475,10 @@ def main():
             # Fill over old image
             minimap.image.fill((31, 31, 31))
             # Render the blocks and then player into the viewbox
-            minimap.render(blocks)
-            minimap.render(spaces)
-            minimap.render((player,))
+            minimap.render(itertools.chain(game.solids, game.spaces, (player, )))
 
-            # Slap the viewbox onto the screen
+            # Display the viewbox onto the screen
             screen.blit(viewbox.image, (0, 0))
-
             # Display the scaled minimap
             screen.blit(
                 pygame.transform.scale(
