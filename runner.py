@@ -249,13 +249,13 @@ class Keyset:
                 # Non iterable, wrap in singleton set
                 self.names[name] = {keys}
 
-    def check(self, name: str, keyboard: dict) -> bool:
+    def held(self, name: str, keyboard: dict) -> bool:
         """Checks if any of the keys linked to a name are held down in a pygame keyboard dict"""
         return any(keyboard[key] for key in self.names[name])
 
-    def any(self, name: str, key: int) -> bool:
+    def has(self, name: str, key: int) -> bool:
         "Checks if the given key value is any of the keys for the given name"
-        return any(key == ref for ref in self.names[name])
+        return key in self.names[name]
 
 
 class Player(Solid):
@@ -424,8 +424,8 @@ class Player(Solid):
         # Casts True/False -> 1/0 for whether keys are pressed,
         # -1: left, 0: none, 1: right
         direction = (
-            int(self.keyset.check("right", inputs["keyboard"]))
-            - int(self.keyset.check("left", inputs["keyboard"]))
+            int(self.keyset.held("right", inputs["keyboard"]))
+            - int(self.keyset.held("left", inputs["keyboard"]))
         )
 
         # Move based on direction
@@ -447,7 +447,7 @@ class Player(Solid):
             # Select keydown events
             if event.type == pygame.KEYDOWN:
                 # Check for jump key
-                if self.keyset.any("jump", event.key) and self.jumps > 0:
+                if self.keyset.has("jump", event.key) and self.jumps > 0:
                     self.speed.y = -self.physicsConfig["jump"]
                     # Decrease jumps remaining
                     self.jumps -= 1
