@@ -48,6 +48,14 @@ class Solid(pygame.sprite.Sprite):
         """Checks if the Solid's hitboxes collide"""
         return self.hitbox.colliderect(other.hitbox)
 
+    def collisions(self, others: typing.Iterable[Solid]):
+        """Returns a list of Solids in the list which are being collided with
+        Uses self.collided as a collides function
+        """
+        return pygame.sprite.spritecollide(
+            self, others, False, collided=lambda s, o: s.collided(o)
+        )
+
 class Block(Solid):
     """General block"""
 
@@ -94,6 +102,14 @@ class Inventory:
         """Checks if the given item is in the Inventory (0 counts)"""
         return name in self.storage
 
+    def __len__(self):
+        """Returns the number of items in the Inventory"""
+        return len(self.storage)
+
+    def __iter__(self):
+        """Returns an iterator built out of the internal storage"""
+        return iter(self.storage)
+
     def clean(self) -> typing.Set[str]:
         """Removes all items with 0 quantity, and returns a set of the names"""
         # Collect names with 0-val
@@ -116,6 +132,15 @@ class Inventory:
             return self.storage[item]
         # Raise ValueError if there is not enough
         raise ValueError("{self}.{item} is {self.storage[item]}, lower than specified {num}")
+
+    def collect(self, other: Inventory) -> None:
+        """Reads the current contents of the other inventory and adds them to this one
+        Note: This takes a snapshot of the other inventory,
+        it will not cause this one to be updated alongside the other
+        """
+        # Loop through elements of other
+        for item in other:
+            self[item] += other[item]
 
 class Item(Solid):
     """Collectable item that has a loot Inventory"""
@@ -207,10 +232,12 @@ class Grid:
 
 class Player(Solid):
     """Main controllable character of the game
-    Player(image: Surface, hitbox: Rect, keyConfig: dict)
+    Player(image: Surface, hitbox: Rect, keyConfig: dict, physicsConfig: dict)
     keyConfig is a {str: int} dictionary that maps names to keycodes
     Currently requires "jump", "left", "right" keyConfigs
     Use Player.keyDictionary to automatically generate a compatible dictionary
+    physicsConfig is similar to keyConfig, but provides physics constants
+    Use Player.physicsDictionary to automatically generate a compatible dictionary
     """
 
     @classmethod
@@ -235,7 +262,8 @@ class Player(Solid):
         }
 
     def __init__(self, image: pygame.Surface,
-                 hitbox: pygame.Rect, keyConfig: typing.Dict[str, int],
+                 hitbox: pygame.Rect,
+                 keyConfig: typing.Dict[str, int],
                  physicsConfig: typing.Dict[str, int]
                 ):
 
@@ -261,6 +289,9 @@ class Player(Solid):
         # Create jumps
         self.jumps = 0
 
+        # Create inventory
+        self.inventory = Inventory()
+
     def move(self, displacement: pygame.Vector2, solids: pygame.sprite.Group):
         """Moves the Player by the given displacement, stopping on collision
         Will reset respective velocities on collision
@@ -270,9 +301,7 @@ class Player(Solid):
         self.hitbox.x += displacement.x
         # Check for collisions
         # Get collisions
-        collisions = pygame.sprite.spritecollide(
-            self, solids, False, collided=lambda s, o: s.collided(o)
-        )
+        collisions = self.collisions(solids)
         # Resolve collisions if existant
         if collisions:
             # Find closest collision
@@ -298,9 +327,7 @@ class Player(Solid):
         self.hitbox.y += displacement.y
         # Check for collisions
         # Get collisions
-        collisions = pygame.sprite.spritecollide(
-            self, solids, False, collided=lambda s, o: s.collided(o)
-        )
+        collisions = self.collisions(solids)
         # Resolve collisions if existant
         if collisions:
             # Find closest collision
@@ -319,6 +346,16 @@ class Player(Solid):
                 self.hitbox.top = collision.hitbox.bottom
             # Stop movement
             self.speed.y = 0
+
+    def collect(self, collectables: typing.Iterable[Item]):
+        """Collects and kills any colliding Items"""
+        # Iterates through what will probably be a list/sprite group
+        # Only iterates through the ones in collision
+        for item in self.collisions(collectables):
+            # Collect the inventory of the item
+            self.inventory.collect(item.inventory)
+            # Remove the collectable
+            item.kill()
 
     def update(self, game: Game):
         """Updates the player relative to the given Game"""
@@ -379,6 +416,9 @@ class Player(Solid):
 
         # Move using object method
         self.move(self.speed, game.solids)
+
+        # Collect any collectables
+        self.collect(game.collectables)
 
         # Align visual rect with actual hitbox
         self.rect.center = self.hitbox.center
@@ -461,7 +501,9 @@ class Game:
                 val = random.random()
                 # Generate tile based on val
                 if val < config["coinDensity"]:
-                    self.collectables.add(self.grid.generate_block(tile, self.images["coin"]))
+                    self.collectables.add(Item(
+                        self.images["coin"], self.grid.rect(tile), Inventory({"coin": 1})
+                    ))
                     self.spaces.add(self.grid.add_block(tile, self.images["space"]))
                 elif val < config["blockDensity"]:
                     self.solids.add(self.grid.add_block(tile, self.images["block"]))
