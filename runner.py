@@ -606,7 +606,10 @@ def main():
             left={pygame.K_LEFT, pygame.K_a},
             right={pygame.K_RIGHT, pygame.K_d},
         ),
-        Player.physicsDictionary(19, 1, 32, 9, 2, 1),
+        Player.physicsDictionary(
+            jump=19, gravity=1, maxFall=32,
+            maxSpeed=7, speed=2, jumps=1,
+        ),
     )
 
     # Create game state
