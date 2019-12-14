@@ -357,51 +357,65 @@ class Player(Solid):
             # Remove the collectable
             item.kill()
 
-    def update(self, game: Game):
-        """Updates the player relative to the given Game"""
+    def accelerate_x(self, change: int):
+        """Updates the horizontal speed, respecting config maxSpeed"""
+        # Only attempt if under max
+        if abs(self.speed.x) < self.physicsConfig["maxSpeed"]:
+            self.speed.x += change
+            # Cap speed
+            # Lower limit
+            if self.speed.x < -self.physicsConfig["maxSpeed"]:
+                self.speed.x = -self.physicsConfig["maxSpeed"]
+            # Upper limit
+            elif self.speed.x > self.physicsConfig["maxSpeed"]:
+                self.speed.x = self.physicsConfig["maxSpeed"]
 
-        # Parse the input
-        # Check for left/right movement presses
-        impulse = 0
-        if game.inputs["keyboard"][self.keyConfig["left"]]:
-            impulse -= 1
-        # Allow cancelling
-        if game.inputs["keyboard"][self.keyConfig["right"]]:
-            impulse += 1
-
-        # Move based on impulse
-        # Left movement
-        if impulse == -1:
-            # Allow acceleration under cap
-            if abs(self.speed.x) < self.physicsConfig["maxSpeed"]:
-                self.speed.x -= self.physicsConfig["speed"]
-                # Cap speed
-                if self.speed.x < -self.physicsConfig["maxSpeed"]:
-                    self.speed.x = -self.physicsConfig["maxSpeed"]
-        # Right movement
-        elif impulse == 1:
-            # Allow acceleration under cap
-            if abs(self.speed.x) < self.physicsConfig["maxSpeed"]:
-                self.speed.x += self.physicsConfig["speed"]
-                # Cap speed
-                if self.speed.x > self.physicsConfig["maxSpeed"]:
-                    self.speed.x = self.physicsConfig["maxSpeed"]
-        # This clause triggers if neither or both key is pressed
-        else:
-            # Decrease speed
+    def decelerate_x(self, change: int):
+        """Updates the horizontal speed, grounding at 0
+        Works expecting 'change' to be positive, and changes speed towards 0
+        """
+        # Started positive
+        if self.speed.x > 0:
+            self.speed.x -= change
+            # Clip at 0
+            if self.speed.x < 0:
+                self.speed.x = 0
+        # Started negative
+        elif self.speed.x < 0:
+            self.speed.x += change
+            # Clip at 0
             if self.speed.x > 0:
-                self.speed.x -= self.physicsConfig["speed"]
-                # Clip at 0
-                if self.speed.x < 0:
-                    self.speed.x = 0
-            elif self.speed.x < 0:
-                self.speed.x += self.physicsConfig["speed"]
-                # Clip at 0
-                if self.speed.x > 0:
-                    self.speed.x = 0
+                self.speed.x = 0
+
+    def impulse(self, inputs: dict):
+        """Updates speed vector based on an inputs dict
+        The inputs should be sourced from a Game.inputs
+        """
+
+        # Calculate horizontal direction based on keypresses
+        # Casts True/False -> 1/0 for whether keys are pressed,
+        # -1: left, 0: none, 1: right
+        direction = (
+            int(inputs["keyboard"][self.keyConfig["right"]])
+            - int(inputs["keyboard"][self.keyConfig["left"]])
+        )
+
+        # Move based on direction
+        # Left movement
+        if direction == -1:
+            # Accelerate attempt
+            self.accelerate_x(-self.physicsConfig["speed"])
+        # Right movement
+        elif direction == 1:
+            # Attempt to accelerate
+            self.accelerate_x(self.physicsConfig["speed"])
+        # No key pressed or cancel
+        else:
+            # Decelerate
+            self.decelerate_x(self.physicsConfig["speed"])
 
         # Check events for keypresses
-        for event in game.inputs["events"]:
+        for event in inputs["events"]:
             # Select keydown events
             if event.type == pygame.KEYDOWN:
                 # Check for jump key
@@ -413,6 +427,13 @@ class Player(Solid):
         # Apply gravity if  below max
         if self.speed.y < self.physicsConfig["maxFall"]:
             self.speed.y += self.physicsConfig["gravity"]
+
+    def update(self, game: Game):
+        """Updates the player relative to the given Game"""
+
+        # Calculate impulse
+        # Updates self.speed
+        self.impulse(game.inputs)
 
         # Move using object method
         self.move(self.speed, game.solids)
