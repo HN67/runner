@@ -67,6 +67,75 @@ class Block(Solid):
     def update(self):
         """Updates the block"""
 
+class Inventory:
+    """Class for managing an inventory
+    Can be initalized referencing a Dict[str, int]
+    """
+
+    def __init__(self, dictionary: typing.Dict[str, int] = None):
+        # Create dict if needed, otherwise reference
+        if dictionary:
+            self.storage = dictionary
+        else:
+            self.storage = {}
+
+    def __getitem__(self, name: str) -> typing.Optional[int]:
+        """Returns the quantity of the given item, 0 if it does not exist"""
+        # Check if name exists
+        if name in self.storage:
+            return self.storage[name]
+        return 0
+
+    def __setitem__(self, name: str, quantity: int) -> None:
+        """Sets the quantity of the given item"""
+        self.storage[name] = quantity
+
+    def __contains__(self, name: str) -> bool:
+        """Checks if the given item is in the Inventory (0 counts)"""
+        return name in self.storage
+
+    def clean(self) -> typing.Set[str]:
+        """Removes all items with 0 quantity, and returns a set of the names"""
+        # Collect names with 0-val
+        names = {name for name in self.storage if self.storage[name] == 0}
+        # Pop given names
+        for name in names:
+            del self.storage[name]
+        # Return deleted names
+        return names
+
+    def take(self, item: str, num: int) -> int:
+        """Attempts to remove the specified amount of an item
+        Raises ValueError if there is not enough
+        Returns the amount remaining
+        """
+        # Check if there are enough in storage
+        if self.storage[item] >= num:
+            # Remove and return remaining
+            self.storage[item] -= num
+            return self.storage[item]
+        # Raise ValueError if there is not enough
+        raise ValueError("{self}.{item} is {self.storage[item]}, lower than specified {num}")
+
+class Item(Solid):
+    """Collectable item that has a loot Inventory"""
+
+    def __init__(self, image: pygame.Surface, hitbox: pygame.Rect, loot: Inventory):
+
+        # Call Solid init
+        super().__init__(hitbox)
+
+        # Reference image
+        self.image = image
+
+        # Create rect
+        self.rect = self.image.get_rect()
+        # Align rect with hitbox
+        self.rect.center = self.hitbox.center
+
+        # Reference inventory
+        self.inventory = loot
+
 class Grid:
     """Manages grid of tiles, mainly Blocks
     Data is a Dict with 2-d coordinate pairs as keys, entities as values
