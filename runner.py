@@ -230,10 +230,38 @@ class Grid:
         The image should probably be a multiple of .scale"""
         return Block(self.rect(index).topleft, image)
 
+# TODO make sure to support keyboard (key is held) and keypress events
+class Keyset:
+    """Gives symbolic names to pygame keys
+    Allows linking multiple keys to a single name,
+    so a check for the name will succeed if any of the keys are pressed
+    """
+
+    def __init__(self, **kwargs: typing.Dict[str, typing.Union[int, typing.Set[int]]]):
+        # Reference links
+        self.names = kwargs
+
+        # Change any single values to singleton sets
+        for name, keys in self.names.items():
+            try:
+                iter(keys)
+            except TypeError:
+                # Non iterable, wrap in singleton set
+                self.names[name] = {keys}
+
+    def check(self, name: str, keyboard: dict) -> bool:
+        """Checks if any of the keys linked to a name are held down in a pygame keyboard dict"""
+        return any(keyboard[key] for key in self.names[name])
+
+    def any(self, name: str, key: int) -> bool:
+        "Checks if the given key value is any of the keys for the given name"
+        return any(key == ref for ref in self.names[name])
+
+
 class Player(Solid):
     """Main controllable character of the game
     Player(image: Surface, hitbox: Rect, keyConfig: dict, physicsConfig: dict)
-    keyConfig is a {str: int} dictionary that maps names to keycodes
+    keyset is a Keyset
     Currently requires "jump", "left", "right" keyConfigs
     Use Player.keyDictionary to automatically generate a compatible dictionary
     physicsConfig is similar to keyConfig, but provides physics constants
@@ -263,7 +291,7 @@ class Player(Solid):
 
     def __init__(self, image: pygame.Surface,
                  hitbox: pygame.Rect,
-                 keyConfig: typing.Dict[str, int],
+                 keyset: Keyset,
                  physicsConfig: typing.Dict[str, int]
                 ):
 
@@ -278,7 +306,7 @@ class Player(Solid):
         self.rect.center = self.hitbox.center
 
         # Reference keyConfig
-        self.keyConfig = keyConfig
+        self.keyset = keyset
 
         # Reference physics config
         self.physicsConfig = physicsConfig
@@ -396,8 +424,8 @@ class Player(Solid):
         # Casts True/False -> 1/0 for whether keys are pressed,
         # -1: left, 0: none, 1: right
         direction = (
-            int(inputs["keyboard"][self.keyConfig["right"]])
-            - int(inputs["keyboard"][self.keyConfig["left"]])
+            int(self.keyset.check("right", inputs["keyboard"]))
+            - int(self.keyset.check("left", inputs["keyboard"]))
         )
 
         # Move based on direction
@@ -419,7 +447,7 @@ class Player(Solid):
             # Select keydown events
             if event.type == pygame.KEYDOWN:
                 # Check for jump key
-                if event.key == self.keyConfig["jump"] and self.jumps > 0:
+                if self.keyset.any("jump", event.key) and self.jumps > 0:
                     self.speed.y = -self.physicsConfig["jump"]
                     # Decrease jumps remaining
                     self.jumps -= 1
@@ -573,7 +601,11 @@ def main():
     # Create player
     player = Player(
         images["player"], pygame.Rect(0, 0, 20, 20),
-        Player.keyDictionary(pygame.K_UP, pygame.K_LEFT, pygame.K_RIGHT),
+        Keyset(
+            jump={pygame.K_UP, pygame.K_w},
+            left={pygame.K_LEFT, pygame.K_a},
+            right={pygame.K_RIGHT, pygame.K_d},
+        ),
         Player.physicsDictionary(19, 1, 32, 9, 2, 1),
     )
 
