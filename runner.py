@@ -24,6 +24,8 @@ config = {
     "blockSize": 32,
     "blockDensity": 0.05,
     "coinDensity": 0.005,
+    "blockClumpRadius": 1,
+    "blockClumpDensity": 0.8,
 }
 
 # Define path function that turns a relative path into an absolute path based on file location
@@ -230,7 +232,6 @@ class Grid:
         The image should probably be a multiple of .scale"""
         return Block(self.rect(index).topleft, image)
 
-# TODO make sure to support keyboard (key is held) and keypress events
 class Keyset:
     """Gives symbolic names to pygame keys
     Allows linking multiple keys to a single name,
@@ -526,6 +527,48 @@ class Game:
         # Initialize input dictionary
         self.inputs = {"events": None, "keyboard": None}
 
+    def generate(self, tiles: typing.Collection[tuple], densityConfig: dict, destructive=False):
+        """Generates tiles into the Game's grid, generates on the tiles given
+        Uses densityConfig for generation probabilities
+        If destructive is true, then tiles will be generated over old ones,
+        if false, if a tile that is to be generated already exists it is left alone.
+        Note that the generation can splash out of the tiles given in clump generation
+        """
+        # Generate tiles in uncharted tiles
+        for tile in tiles:
+            if destructive or tile not in self.grid:
+                # Generate float [0, 1)
+                val = random.random()
+                # Generate tile based on val
+                # Coin density takes precedence over blocks
+                if val < densityConfig["coinDensity"]:
+                    self.collectables.add(Item(
+                        self.images["coin"], self.grid.rect(tile), Inventory({"coin": 1})
+                    ))
+                    self.spaces.add(self.grid.add_block(tile, self.images["space"]))
+                elif val < densityConfig["blockDensity"]:
+                    # Attempt "splash" generation
+                    # Create main block
+                    self.solids.add(self.grid.add_block(tile, self.images["block"]))
+                    # Create range object
+                    area = range(
+                        -densityConfig["blockClumpRadius"],
+                        densityConfig["blockClumpRadius"]+1
+                    )
+                    # Iterate through both axes
+                    for x in area:
+                        for y in area:
+                            # Get val for generation possibility
+                            if random.random() < densityConfig["blockClumpDensity"]:
+                                if destructive or (tile[0]+x, tile[1]+y) not in self.grid:
+                                    # Generate offset based on current x,y
+                                    self.solids.add(self.grid.add_block(
+                                        (tile[0]+x, tile[1]+y), self.images["block"]
+                                    ))
+                else:
+                    # Signifies that this has been generated, just without block/coin
+                    self.spaces.add(self.grid.add_block(tile, self.images["space"]))
+
     def update(self, events, viewbox: Viewbox):
         """Updates the Game, interacting entities appropriately
         Reads read-inputs (i.e. the keyboard) itself,
@@ -543,21 +586,8 @@ class Game:
         # Pull visible tiles
         visibleTiles = self.grid.viewbox_tiles(viewbox)
 
-        # Generate tiles in uncharted tiles
-        for tile in visibleTiles:
-            if tile not in self.grid:
-                # Generate float [0, 1)
-                val = random.random()
-                # Generate tile based on val
-                if val < config["coinDensity"]:
-                    self.collectables.add(Item(
-                        self.images["coin"], self.grid.rect(tile), Inventory({"coin": 1})
-                    ))
-                    self.spaces.add(self.grid.add_block(tile, self.images["space"]))
-                elif val < config["blockDensity"]:
-                    self.solids.add(self.grid.add_block(tile, self.images["block"]))
-                else:
-                    self.spaces.add(self.grid.add_block(tile, self.images["space"]))
+        # Generate tiles, using global config for now
+        self.generate(visibleTiles, config)
 
 def load_images() -> typing.Dict[str, pygame.Surface]:
     """Loads the projects image resources
