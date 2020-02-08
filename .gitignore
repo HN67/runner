@@ -1,2 +1,5 @@
 # Ignore pycache of custom modules
 __pycache__/
+
+# Ignore vscode configs
+.vscode/

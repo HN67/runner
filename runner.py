@@ -84,10 +84,20 @@ class Inventory:
 
     def __init__(self, dictionary: typing.Dict[str, int] = None):
         # Create dict if needed, otherwise reference
+        # Order is a list of keys, saving the order of items
+        # If the inventory is initialized with a dictionary,
+        # the items currently in are ordered in whatever is returned by .keys()
+        # when an item is added to the Inventory that doesnt already exist, it is appeneded to the order
         if dictionary:
             self.storage = dictionary
+            self.order = list(dictionary.keys())
         else:
             self.storage = {}
+            self.order = []
+
+    def foo():
+        pass
+        #.a = 3
 
     def __getitem__(self, name: str) -> typing.Optional[int]:
         """Returns the quantity of the given item, 0 if it does not exist"""
@@ -705,6 +715,7 @@ def main():
             # Limit to determined tps
             clock.tick(tps)
 
+# TODO inventory displays / popups. other UI elements like labels, buttons? <- Big rabbit hole
 # main script pattern
 if __name__ == "__main__":
     main()
